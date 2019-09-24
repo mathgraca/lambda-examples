@@ -1,0 +1,78 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'app
+
+  Sample SAM Template for app
+
+  '
+Globals:
+  Function:
+    Timeout: 3
+Outputs:
+  HelloWorldApi:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/
+  HelloWorldFunction:
+    Description: Hello World Lambda Function ARN
+    Value:
+      Fn::GetAtt:
+      - HelloWorldFunction
+      - Arn
+  HelloWorldFunctionError:
+    Description: API Gateway endpoint URL for Prod stage for Hello World function
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/error/
+  HelloWorldFunctionIamRole:
+    Description: Implicit IAM Role created for Hello World function
+    Value:
+      Fn::GetAtt:
+      - HelloWorldFunctionRole
+      - Arn
+Resources:
+  ErrorFunction:
+    Properties:
+      AutoPublishAlias: pegue
+      CodeUri: s3://mathgraca-lambda-test/f473703244b43cf202b7a3627795c463
+      Events:
+        HelloWorld:
+          Properties:
+            Method: get
+            Path: /error
+          Type: Api
+      Handler: app.lambdaError
+      Runtime: nodejs10.x
+    Type: AWS::Serverless::Function
+  HelloWorldError:
+    Properties:
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+      - Name: FunctionName
+        Value:
+          Ref: HelloWorldFunction
+      EvaluationPeriods: 1
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Period: 60
+      Statistic: Sum
+      Threshold: 5
+      TreatMissingData: notBreaching
+    Type: AWS::CloudWatch::Alarm
+  HelloWorldFunction:
+    Properties:
+      AutoPublishAlias: pegue
+      CodeUri: s3://mathgraca-lambda-test/0965d5d7f4561d7ef713a065b7ac02ac
+      Events:
+        HelloWorld:
+          Properties:
+            Method: get
+            Path: /hello
+          Type: Api
+        SubmitForm:
+          Properties:
+            Method: post
+            Path: /hello
+          Type: Api
+      Handler: app.lambdaHandler
+      Runtime: nodejs10.x
+    Type: AWS::Serverless::Function
+Transform: AWS::Serverless-2016-10-31
