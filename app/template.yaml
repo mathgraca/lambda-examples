@@ -1,11 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  app
-
-  Sample SAM Template for app
-  
-# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Description: Convert file in S3
 Globals:
   Function:
     Timeout: 3
@@ -20,53 +15,115 @@ Parameters:
     MinLength: 1
     ConstraintDescription: "1- 10 latin letters"
 
+  UploadLimitInMb:
+    Type: Number 
+    Default: 5
+    Description: Maximum upload size in megabytes
+    MinValue: 1
+    MaxValue: 100
+
 Resources:
   UploadS3Bucket:
     Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
 
   WebApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: !Ref AppStage
 
+  ThumbnailsS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  ConvertFunctionCanReadUploads:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ConvertFunctionCanReadUploads
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - "s3:GetObject"
+            Resource:
+              - !Sub "${UploadS3Bucket.Arn}/*"
+      Roles:
+        - !Ref ConvertFileFunctionRole
+
   ShowFormFunction:
-    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Type: AWS::Serverless::Function
     Properties:
       CodeUri: user-form/
       Handler: show-form.lambdaHandler
       Runtime: nodejs10.x
-      AutoPublishAlias: pegue
+     # AutoPublishAlias: pegue
      # DeploymentPreference:
      #   Type: Linear10PercentEvery1Minute
      #    Alarms:
      #     - !Ref HelloWorldError
       Events:
         ShowForm:
-          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Type: Api
           Properties:
             Path: /
             Method: get
             RestApiId: !Ref WebApi
-
-  ProcessFormFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: user-form/
-      Handler: process-form.lambdaHandler
-      Runtime: nodejs10.x
-      Environment:
+      Environment: 
         Variables:
           UPLOAD_S3_BUCKET: !Ref UploadS3Bucket
+          UPLOAD_LIMIT_IN_MB: !Ref UploadLimitInMb
       Policies:
         - S3FullAccessPolicy:
             BucketName: !Ref UploadS3Bucket
+
+  ConfirmUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: user-form/
+      Handler: confirm-upload.lambdaHandler
+      Runtime: nodejs10.x
       Events:
-        SubmitForm:
+        ConfirmForm:
           Type: Api
           Properties:
-            Path: /
-            Method: post
+            Path: /confirm
+            Method: get
             RestApiId: !Ref WebApi
+      Environment:
+        Variables:
+          UPLOAD_S3_BUCKET: !Ref ThumbnailsS3Bucket
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref ThumbnailsS3Bucket
+
+  ConvertFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: image-conversion/
+      Handler: index.handler
+      Runtime: nodejs10.x
+      Events:
+        FileUploaded:
+          Type: S3
+          Properties:
+            Bucket: !Ref UploadS3Bucket
+            Events: s3:ObjectCreated:*
+      Timeout: 600
+      Environment:
+        Variables:
+          OUTPUT_BUCKET: !Ref ThumbnailsS3Bucket
+      Policies:
+        - S3FullAccessPolicy:
+            BucketName: !Ref ThumbnailsS3Bucket
 
   HelloWorldError:
     Type: AWS::CloudWatch::Alarm 
@@ -116,9 +173,3 @@ Outputs:
   ShowFormFunctionIamRole:
     Description: "Implicit IAM Role created for Hello World function"
     Value: !GetAtt ShowFormFunctionRole.Arn
-  ProcessFormFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt ProcessFormFunction.Arn
-  ProcessFormFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt ProcessFormFunctionRole.Arn

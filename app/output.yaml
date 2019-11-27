@@ -1,25 +1,163 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'app
-
-  Sample SAM Template for app
-
-  '
+Transform: AWS::Serverless-2016-10-31
+Description: Convert file in S3
 Globals:
   Function:
     Timeout: 3
+Parameters:
+  AppStage:
+    Type: String
+    Default: api
+    Description: Prefixo do endpoint
+    AllowedPattern: ^[A-Za-z]+$
+    MaxLength: 10
+    MinLength: 1
+    ConstraintDescription: 1- 10 latin letters
+  UploadLimitInMb:
+    Type: Number
+    Default: 5
+    Description: Maximum upload size in megabytes
+    MinValue: 1
+    MaxValue: 100
+Resources:
+  UploadS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  WebApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName:
+        Ref: AppStage
+  ThumbnailsS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+  ConvertFunctionCanReadUploads:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ConvertFunctionCanReadUploads
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - s3:GetObject
+          Resource:
+          - Fn::Sub: ${UploadS3Bucket.Arn}/*
+      Roles:
+      - Ref: ConvertFileFunctionRole
+  ShowFormFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://mathgraca-lambda-test/6bced57e3f232e305d0d753b4cd266b6
+      Handler: show-form.lambdaHandler
+      Runtime: nodejs10.x
+      Events:
+        ShowForm:
+          Type: Api
+          Properties:
+            Path: /
+            Method: get
+            RestApiId:
+              Ref: WebApi
+      Environment:
+        Variables:
+          UPLOAD_S3_BUCKET:
+            Ref: UploadS3Bucket
+          UPLOAD_LIMIT_IN_MB:
+            Ref: UploadLimitInMb
+      Policies:
+      - S3FullAccessPolicy:
+          BucketName:
+            Ref: UploadS3Bucket
+  ConfirmUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://mathgraca-lambda-test/6bced57e3f232e305d0d753b4cd266b6
+      Handler: confirm-upload.lambdaHandler
+      Runtime: nodejs10.x
+      Events:
+        ConfirmForm:
+          Type: Api
+          Properties:
+            Path: /confirm
+            Method: get
+            RestApiId:
+              Ref: WebApi
+      Environment:
+        Variables:
+          UPLOAD_S3_BUCKET:
+            Ref: ThumbnailsS3Bucket
+      Policies:
+      - S3ReadPolicy:
+          BucketName:
+            Ref: ThumbnailsS3Bucket
+  ConvertFileFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://mathgraca-lambda-test/9f2fe3390710bfabb8e7ef68292b5a3f
+      Handler: index.handler
+      Runtime: nodejs10.x
+      Events:
+        FileUploaded:
+          Type: S3
+          Properties:
+            Bucket:
+              Ref: UploadS3Bucket
+            Events: s3:ObjectCreated:*
+      Timeout: 600
+      Environment:
+        Variables:
+          OUTPUT_BUCKET:
+            Ref: ThumbnailsS3Bucket
+      Policies:
+      - S3FullAccessPolicy:
+          BucketName:
+            Ref: ThumbnailsS3Bucket
+  HelloWorldError:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      MetricName: Errors
+      Statistic: Sum
+      ComparisonOperator: GreaterThanThreshold
+      Threshold: 5
+      Period: 60
+      EvaluationPeriods: 1
+      TreatMissingData: notBreaching
+      Namespace: AWS/Lambda
+      Dimensions:
+      - Name: FunctionName
+        Value:
+          Ref: ShowFormFunction
+  ErrorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: s3://mathgraca-lambda-test/6bced57e3f232e305d0d753b4cd266b6
+      Handler: app.lambdaError
+      Runtime: nodejs10.x
+      AutoPublishAlias: pegue
+      Events:
+        HelloWorld:
+          Type: Api
+          Properties:
+            Path: /error
+            Method: get
 Outputs:
-  ProcessFormFunction:
-    Description: Hello World Lambda Function ARN
+  UserFormApi:
+    Description: API Gateway endpoint URL
     Value:
-      Fn::GetAtt:
-      - ProcessFormFunction
-      - Arn
-  ProcessFormFunctionIamRole:
-    Description: Implicit IAM Role created for Hello World function
+      Fn::Sub: https://${WebApi}.execute-api.${AWS::Region}.amazonaws.com/${AppStage}/
+  UploadBucket:
+    Description: S3 Bucket Information
     Value:
-      Fn::GetAtt:
-      - ProcessFormFunctionRole
-      - Arn
+      Ref: UploadS3Bucket
   ShowFormFunction:
     Description: Hello World Lambda Function ARN
     Value:
@@ -32,90 +170,3 @@ Outputs:
       Fn::GetAtt:
       - ShowFormFunctionRole
       - Arn
-  UploadBucket:
-    Description: S3 Bucket Information
-    Value:
-      Ref: UploadS3Bucket
-  UserFormApi:
-    Description: API Gateway endpoint URL
-    Value:
-      Fn::Sub: https://${WebApi}.execute-api.${AWS::Region}.amazonaws.com/${AppStage}/
-Parameters:
-  AppStage:
-    AllowedPattern: ^[A-Za-z]+$
-    ConstraintDescription: 1- 10 latin letters
-    Default: api
-    Description: Prefixo do endpoint
-    MaxLength: 10
-    MinLength: 1
-    Type: String
-Resources:
-  ErrorFunction:
-    Properties:
-      AutoPublishAlias: pegue
-      CodeUri: s3://mathgraca-lambda-test/54b694c1945f0049907b63e43a53d837
-      Events:
-        HelloWorld:
-          Properties:
-            Method: get
-            Path: /error
-          Type: Api
-      Handler: app.lambdaError
-      Runtime: nodejs10.x
-    Type: AWS::Serverless::Function
-  HelloWorldError:
-    Properties:
-      ComparisonOperator: GreaterThanThreshold
-      Dimensions:
-      - Name: FunctionName
-        Value:
-          Ref: ShowFormFunction
-      EvaluationPeriods: 1
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Period: 60
-      Statistic: Sum
-      Threshold: 5
-      TreatMissingData: notBreaching
-    Type: AWS::CloudWatch::Alarm
-  ProcessFormFunction:
-    Properties:
-      CodeUri: s3://mathgraca-lambda-test/e56464937b6d4edebb728b27abf2925d
-      Environment:
-        Variables:
-          UPLOAD_S3_BUCKET:
-            Ref: UploadS3Bucket
-      Events:
-        SubmitForm:
-          Properties:
-            Method: post
-            Path: /
-            RestApiId:
-              Ref: WebApi
-          Type: Api
-      Handler: process-form.lambdaHandler
-      Runtime: nodejs10.x
-    Type: AWS::Serverless::Function
-  ShowFormFunction:
-    Properties:
-      AutoPublishAlias: pegue
-      CodeUri: s3://mathgraca-lambda-test/85c4f500103aa172596c3f467fab496e
-      Events:
-        ShowForm:
-          Properties:
-            Method: get
-            Path: /
-            RestApiId:
-              Ref: WebApi
-          Type: Api
-      Handler: show-form.lambdaHandler
-      Runtime: nodejs10.x
-    Type: AWS::Serverless::Function
-  UploadS3Bucket:
-    Type: AWS::S3::Bucket
-  WebApi:
-    Properties:
-      StageName:
-        Ref: AppStage
-    Type: AWS::Serverless::Api
-Transform: AWS::Serverless-2016-10-31
