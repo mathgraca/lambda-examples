@@ -19,7 +19,19 @@ Parameters:
     Description: Maximum upload size in megabytes
     MinValue: 1
     MaxValue: 100
+  ThumbnailWidth:
+    Type: Number
+    Default: 300
+    Description: Thumbnail width in pixels
+    MinValue: 10
+    MaxValue: 1000
 Resources:
+  ImageMagick:
+    Type: AWS::Serverless::Application
+    Properties:
+      Location:
+        ApplicationId: arn:aws:serverlessrepo:us-east-1:145266761615:applications/image-magick-lambda-layer
+        SemanticVersion: 1.0.0
   UploadS3Bucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -113,14 +125,21 @@ Resources:
               Ref: UploadS3Bucket
             Events: s3:ObjectCreated:*
       Timeout: 600
+      MemorySize: 1024
       Environment:
         Variables:
           OUTPUT_BUCKET:
             Ref: ThumbnailsS3Bucket
+          THUMB_WIDTH:
+            Ref: ThumbnailWidth
       Policies:
       - S3FullAccessPolicy:
           BucketName:
             Ref: ThumbnailsS3Bucket
+      Layers:
+      - Fn::GetAtt:
+        - ImageMagick
+        - Outputs.LayerVersion
   HelloWorldError:
     Type: AWS::CloudWatch::Alarm
     Properties:
