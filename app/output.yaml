@@ -25,6 +25,10 @@ Parameters:
     Description: Thumbnail width in pixels
     MinValue: 10
     MaxValue: 1000
+  AllowedImageExtensions:
+    Type: String
+    Default: jpg,jpeg,png,gif
+    Description: Comma-delimited list of allowed image file extensions (lowercase)
 Resources:
   ImageMagick:
     Type: AWS::Serverless::Application
@@ -98,14 +102,14 @@ Resources:
   ShowFormFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: s3://mathgraca-lambda-test/184d8f71f6ea9a2a30d148cec06fc579
+      CodeUri: s3://mathgraca-lambda-test/1d53b8076436edb99fc9a4c3ba281fe1
       Handler: show-form.lambdaHandler
       Runtime: nodejs10.x
       Events:
         ShowForm:
           Type: Api
           Properties:
-            Path: /
+            Path: /sign/{extension}
             Method: get
             RestApiId:
               Ref: WebApi
@@ -121,6 +125,8 @@ Resources:
             - WebsiteURL
           THUMBNAILS_S3_BUCKET:
             Ref: ThumbnailsS3Bucket
+          ALLOWED_IMAGE_EXTENSIONS:
+            Ref: AllowedImageExtensions
       Policies:
       - S3FullAccessPolicy:
           BucketName:
@@ -170,7 +176,7 @@ Resources:
       - Fn::GetAtt:
         - DeployToS3
         - Outputs.Arn
-      CodeUri: s3://mathgraca-lambda-test/5bc4ddfbcc9e5f6163cc1059041bb7e7
+      CodeUri: s3://mathgraca-lambda-test/7f8d31924c781581499c7f59a238cbe2
       AutoPublishAlias: production
       Runtime: python3.7
       Handler: deployer.resource_handler

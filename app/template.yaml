@@ -29,6 +29,11 @@ Parameters:
     MinValue: 10
     MaxValue: 1000
 
+  AllowedImageExtensions:
+    Type: String
+    Default: jpg,jpeg,png,gif
+    Description: Comma-delimited list of allowed image file extensions (lowercase)
+
 Resources:
   ImageMagick:
     Type: AWS::Serverless::Application
@@ -114,7 +119,7 @@ Resources:
         ShowForm:
           Type: Api
           Properties:
-            Path: /
+            Path: /sign/{extension}
             Method: get
             RestApiId: !Ref WebApi
       Environment: 
@@ -123,6 +128,7 @@ Resources:
           UPLOAD_LIMIT_IN_MB: !Ref UploadLimitInMb
           CORS_ORIGIN: !GetAtt WebAssetsS3Bucket.WebsiteURL
           THUMBNAILS_S3_BUCKET: !Ref ThumbnailsS3Bucket
+          ALLOWED_IMAGE_EXTENSIONS: !Ref AllowedImageExtensions
       Policies:
         - S3FullAccessPolicy:
             BucketName: !Ref UploadS3Bucket
